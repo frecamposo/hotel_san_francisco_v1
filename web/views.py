@@ -12,6 +12,11 @@ from django.contrib.auth.decorators import login_required, permission_required
 from django.shortcuts import redirect
 from datetime import datetime, timedelta
 import uuid
+import math
+
+from openpyxl import Workbook,load_workbook
+from django.http import HttpResponse
+from io import BytesIO
 
 import qrcode
 from io import BytesIO
@@ -20,7 +25,13 @@ from PIL import Image,ImageDraw
 from django.core.mail import EmailMessage
 from django.http import HttpResponse
 from django.core.files.base import ContentFile
+import pandas as pd
 # Create your views here.
+documento_inf=[]
+monto_buscar_inf=[]
+diferencia_inf=[]
+fecha_inf=[]
+tc_inf=[]
 
 def inicio(request):
     request.session["datos"]=""
@@ -32,185 +43,408 @@ def inicio(request):
     mensaje={'comentarios':comentarios}
     return render(request,"index.html",mensaje)
 
-def quienes_somos(request):
+def procesamiento(request):
+    print("entro")
     contexto={}
-    return render(request,"quienes_somos.html",contexto)
+    if request.method == 'POST':
+        archivo1 = request.FILES.get('archivo1')
+        archivo2 = request.FILES.get('archivo2')
+        archivo3 = request.FILES.get('archivo3')
+        archivo4 = request.FILES.get('archivo4') # visa dolar
+        archivo5 = request.FILES.get('archivo5')
+        archivo7 = request.FILES.get('archivo7')
+        if archivo1:
+            print("ES VALIDO")
+            x=pd.read_excel(archivo1,usecols=[1,2,3,4,5,6,7,8,9,10], nrows=1500)
+            diccionario = {}
+            i=0
+            for fila in x.index:
+                i+= 1
+                texto = f"{i} - {x.at[fila, 'Unnamed: 3']} - {x.at[fila, 'Unnamed: 5']} - {x.at[fila,'Unnamed: 8']}"
+                if "US$" in texto:
+                    print(texto)
+                    codigo_buscar = x.at[fila, 'Unnamed: 3']
+                    valor_buscado = abs(int(x.at[fila, 'Unnamed: 8']))
+                    fecha_erp = x.at[fila, 'Unnamed: 10']
+                    #print(f"CODIGO A BUSCAR: {codigo_buscar} - Valor Buscado:{valor_buscado} ")
+                    print("-----------------------------------")
+                    if "Amex US$" in texto:
+                        cantidad=0
+                        suma = 0
+                        if archivo2:
+                            print("Archivo de AMEX US$")
+                            amex=pd.read_excel(archivo2,usecols=[1,2,3,4,5,6,7,8,9,10,11,12,13,14], nrows=2500)
+                            i_amex=0
+                            print("Valores Archivo AMEX US$ -----------------------------------")
+                            sw=0
+                            for fila_amex in amex.index:
+                                codigo = amex.at[fila_amex, 'Unnamed: 2']
+                                i_amex = i_amex +1
+                                texto_amex = f"{i_amex} - {amex.at[fila_amex, 'Unnamed: 2']} - {amex.at[fila_amex, 'Unnamed: 12']} - {amex.at[fila_amex,'Unnamed: 13']} - {amex.at[fila_amex,'Unnamed: 14']}"
+                                if codigo_buscar==codigo:
+                                    cantidad = cantidad +1
+                                    print("----> Encontrada la Cuenta:")
+                                    if not math.isnan(amex.at[fila_amex, 'Unnamed: 12']): 
+                                        if valor_buscado==abs(int(amex.at[fila_amex, 'Unnamed: 12'])):
+                                            print(f"Valor Buscado: {valor_buscado} esta presente en OTRA MONEDA {amex.at[fila_amex, 'Unnamed: 12']}")
+                                            suma = suma + abs(int(amex.at[fila_amex, 'Unnamed: 12']))
+                                    if not math.isnan(amex.at[fila_amex, 'Unnamed: 13']):                                     
+                                        if valor_buscado==abs(int(amex.at[fila_amex, 'Unnamed: 13'])):
+                                            print(f"Valor Buscado: {valor_buscado} esta presente en SALDO {amex.at[fila_amex, 'Unnamed: 13']}")
+                                            suma = suma + abs(int(amex.at[fila_amex, 'Unnamed: 13']))
+                                    if not math.isnan(amex.at[fila_amex, 'Unnamed: 14']): 
+                                        if valor_buscado==abs(int(amex.at[fila_amex, 'Unnamed: 14'])):
+                                            print(f"Valor Buscado: {valor_buscado} esta presente en SALDO CORREGIDO {amex.at[fila_amex, 'Unnamed: 14']}")
+                                            suma = suma + abs(int(amex.at[fila_amex, 'Unnamed: 14']))                                    
+                                    print(texto_amex)
+                                    sw=1
+                                    diccionario[f"{i}"]={"tarjeta":"Amex US$","codigo":abs(int(codigo_buscar)),"Valor":valor_buscado,"Status":"encontrado"}
+                                    continue
+                            if(sw==0):
+                                print(f"NO ENCONTRO EL CODIGO : {codigo_buscar} CUYO VALOR ES DE {valor_buscado}")
+                                tc_inf.append("Amex US$")
+                                documento_inf.append(abs(int(codigo_buscar)))
+                                monto_buscar_inf.append(valor_buscado)
+                                fecha_inf.append(fecha_erp)
+                                diccionario[f"{i}"]={"tarjeta":"Amex US$","codigo":abs(int(codigo_buscar)),"Valor":valor_buscado,"Status":"no encontrado"}                                               
+                    if "Dinners US$" in texto:
+                        cantidad=0
+                        suma = 0
+                        if archivo3:
+                            print("Archivo de Dinners US$")
+                            dinners=pd.read_excel(archivo3,usecols=[1,2,3,4,5,6,7,8,9,10,11,12,13,14], nrows=2500)
+                            i_dinners=0
+                            print("Valores Archivo DINNERS US$ -----------------------------------")
+                            sw=0
+                            for fila_dinners in dinners.index:
+                                codigo = dinners.at[fila_dinners, 'Unnamed: 2']
+                                i_dinners = i_dinners +1
+                                texto_dinners = f"{i_dinners} - {dinners.at[fila_dinners, 'Unnamed: 2']} - {dinners.at[fila_dinners, 'Unnamed: 12']} - {dinners.at[fila_dinners,'Unnamed: 13']} - {dinners.at[fila_dinners,'Unnamed: 14']}"
+                                if codigo_buscar==codigo:
+                                    cantidad = cantidad +1
+                                    print("----> Encontrada la Cuenta:")
+                                    if not math.isnan(dinners.at[fila_dinners, 'Unnamed: 12']): 
+                                        if valor_buscado==abs(int(dinners.at[fila_dinners, 'Unnamed: 12'])):
+                                            print(f"Valor Buscado: {valor_buscado} esta presente en OTRA MONEDA {dinners.at[fila_dinners, 'Unnamed: 12']}")
+                                            suma = suma + abs(int(dinners.at[fila_dinners, 'Unnamed: 12']))                                            
+                                            
+                                    if not math.isnan(dinners.at[fila_dinners, 'Unnamed: 13']):                                     
+                                        if valor_buscado==abs(int(dinners.at[fila_dinners, 'Unnamed: 13'])):
+                                            print(f"Valor Buscado: {valor_buscado} esta presente en SALDO {dinners.at[fila_dinners, 'Unnamed: 13']}")
+                                            suma = suma + abs(int(dinners.at[fila_dinners, 'Unnamed: 13']))
+                                            
+                                    if not math.isnan(dinners.at[fila_dinners, 'Unnamed: 14']): 
+                                        if valor_buscado==abs(int(dinners.at[fila_dinners, 'Unnamed: 14'])):
+                                            print(f"Valor Buscado: {valor_buscado} esta presente en SALDO CORREGIDO {dinners.at[fila_dinners, 'Unnamed: 14']}")
+                                            suma = suma + abs(int(dinners.at[fila_dinners, 'Unnamed: 14']))                                    
+                                    print(texto_dinners)
+                                    sw=1
+                                    diccionario[f"{i}"]={"tarjeta":"Dinners US$","codigo":abs(int(codigo_buscar)),"Valor":valor_buscado,"Status":"encontrado"}
+                            if(sw==0):
+                                print(f"NO ENCONTRO EL CODIGO : {codigo_buscar} CUYO VALOR ES DE {valor_buscado}")
+                                tc_inf.append("Dinners US$")
+                                documento_inf.append(abs(int(codigo_buscar)))
+                                monto_buscar_inf.append(valor_buscado)
+                                fecha_inf.append(fecha_erp)
+                                diccionario[f"{i}"]={"tarjeta":"Dinners US$","codigo":abs(int(codigo_buscar)),"Valor":valor_buscado,"Status":"no encontrado"}                                             
+                    if "Master Card US$" in texto:
+                        cantidad=0
+                        suma = 0
+                        if archivo4:
+                            print("Archivo de Master Card US$")
+                            mc=pd.read_excel(archivo5,usecols=[1,2,3,4,5,6,7,8,9,10,11,12,13,14], nrows=2500)
+                            i_mc=0
+                            print("Valores Archivo Master Card US$ -----------------------------------")
+                            sw=0
+                            for fila_mc in mc.index:
+                                codigo = mc.at[fila_mc, 'Unnamed: 2']
+                                i_mc = i_mc +1
+                                texto_mc = f"{i_mc} - {mc.at[fila_mc, 'Unnamed: 2']} - {mc.at[fila_mc, 'Unnamed: 12']} - {mc.at[fila_mc,'Unnamed: 13']} - {mc.at[fila_mc,'Unnamed: 14']}"
+                                if codigo_buscar==codigo:
+                                    cantidad = cantidad +1
+                                    print("----> Encontrada la Cuenta:")
+                                    if not math.isnan(mc.at[fila_mc, 'Unnamed: 12']): 
+                                        if valor_buscado==abs(int(mc.at[fila_mc, 'Unnamed: 12'])):
+                                            print(f"Valor Buscado: {valor_buscado} esta presente en OTRA MONEDA {mc.at[fila_mc, 'Unnamed: 12']}")
+                                            suma = suma + abs(int(mc.at[fila_mc, 'Unnamed: 12']))                                            
+                                            
+                                    if not math.isnan(mc.at[fila_mc, 'Unnamed: 13']):                                     
+                                        if valor_buscado==abs(int(mc.at[fila_mc, 'Unnamed: 13'])):
+                                            print(f"Valor Buscado: {valor_buscado} esta presente en SALDO {mc.at[fila_mc, 'Unnamed: 13']}")
+                                            suma = suma + abs(int(mc.at[fila_mc, 'Unnamed: 13']))
+                                            
+                                    if not math.isnan(mc.at[fila_mc, 'Unnamed: 14']): 
+                                        if valor_buscado==abs(int(mc.at[fila_mc, 'Unnamed: 14'])):
+                                            print(f"Valor Buscado: {valor_buscado} esta presente en SALDO CORREGIDO {mc.at[fila_mc, 'Unnamed: 14']}")
+                                            suma = suma + abs(int(mc.at[fila_mc, 'Unnamed: 14']))                                    
+                                    print(texto_mc)
+                                    sw=1
+                                    diccionario[f"{i}"]={"tarjeta":"Master Card US$","codigo":abs(int(codigo_buscar)),"Valor":valor_buscado,"Status":"encontrado"}
+                            if(sw==0):
+                                print(f"NO ENCONTRO EL CODIGO : {codigo_buscar} CUYO VALOR ES DE {valor_buscado}")
+                                tc_inf.append("Master Card US$")
+                                documento_inf.append(abs(int(codigo_buscar)))
+                                monto_buscar_inf.append(valor_buscado)
+                                fecha_inf.append(fecha_erp)
+                                diccionario[f"{i}"]={"tarjeta":"Master Card US$","codigo":abs(int(codigo_buscar)),"Valor":valor_buscado,"Status":"no encontrado"}                                             
 
-def reserva(request):
-    contexto={}
-    return render(request,"booking.html",contexto)
+                    if "Visa US$" in texto:
+                        cantidad=0
+                        suma = 0
+                        if archivo4:
+                            print("Archivo de Visa US$")
+                            mc=pd.read_excel(archivo4,usecols=[1,2,3,4,5,6,7,8,9,10,11,12,13,14], nrows=2500)
+                            i_mc=0
+                            print("Valores Archivo Visa US$ -----------------------------------")
+                            sw=0
+                            for fila_mc in mc.index:
+                                codigo = mc.at[fila_mc, 'Unnamed: 2']
+                                i_mc = i_mc +1
+                                texto_mc = f"{i_mc} - {mc.at[fila_mc, 'Unnamed: 2']} - {mc.at[fila_mc, 'Unnamed: 12']} - {mc.at[fila_mc,'Unnamed: 13']} - {mc.at[fila_mc,'Unnamed: 14']}"
+                                if codigo_buscar==codigo:
+                                    cantidad = cantidad +1
+                                    print("----> Encontrada la Cuenta:")
+                                    if not math.isnan(mc.at[fila_mc, 'Unnamed: 12']): 
+                                        if valor_buscado==abs(int(mc.at[fila_mc, 'Unnamed: 12'])):
+                                            print(f"Valor Buscado: {valor_buscado} esta presente en OTRA MONEDA {mc.at[fila_mc, 'Unnamed: 12']}")
+                                            suma = suma + abs(int(mc.at[fila_mc, 'Unnamed: 12']))                                            
+                                            
+                                    if not math.isnan(mc.at[fila_mc, 'Unnamed: 13']):                                     
+                                        if valor_buscado==abs(int(mc.at[fila_mc, 'Unnamed: 13'])):
+                                            print(f"Valor Buscado: {valor_buscado} esta presente en SALDO {mc.at[fila_mc, 'Unnamed: 13']}")
+                                            suma = suma + abs(int(mc.at[fila_mc, 'Unnamed: 13']))
+                                            
+                                    if not math.isnan(mc.at[fila_mc, 'Unnamed: 14']): 
+                                        if valor_buscado==abs(int(mc.at[fila_mc, 'Unnamed: 14'])):
+                                            print(f"Valor Buscado: {valor_buscado} esta presente en SALDO CORREGIDO {mc.at[fila_mc, 'Unnamed: 14']}")
+                                            suma = suma + abs(int(mc.at[fila_mc, 'Unnamed: 14']))                                    
+                                    print(texto_mc)
+                                    sw=1
+                                    diccionario[f"{i}"]={"tarjeta":"Visa US$","codigo":abs(int(codigo_buscar)),"Valor":valor_buscado,"Status":"encontrado"}
+                            if(sw==0):
+                                print(f"NO ENCONTRO EL CODIGO : {codigo_buscar} CUYO VALOR ES DE {valor_buscado}")
+                                tc_inf.append("Visa US$")
+                                documento_inf.append(abs(int(codigo_buscar)))
+                                monto_buscar_inf.append(valor_buscado)
+                                fecha_inf.append(fecha_erp)
+                                diccionario[f"{i}"]={"tarjeta":"Visa US$","codigo":abs(int(codigo_buscar)),"Valor":valor_buscado,"Status":"no encontrado"}                                             
 
-def contacto(request):
-    contexto={}
-    return render(request,"contact.html",contexto)
-
-def habitaciones(request):
-    lista_habitaciones=Habitacion.objects.all()
-    contexto={'lista':lista_habitaciones}
-    contexto['loop_times'] = range(1, 2)
-    comentarios=Comentario.objects.all()
-    contexto['comentarios']=comentarios
-    return render(request,"room.html",contexto)
-
-def servicios(request):
-    contexto={}
-    return render(request,"service.html",contexto)
-
-def testimonial(request):
-    contexto={}
-    return render(request,"testimonial.html",contexto)
-    
-def acerca(request):
-    contexto={}
-    return render(request,"acerca.html",contexto)
-
-    
-def listado_habitaciones(request):
-    hab=Habitacion.objects.all()
-    contexto={'lista_h':hab}
-    return render(request,"listado_habitaciones.html",contexto)
-
-@login_required(login_url='/login/')
-def det_habitacion(request,id):
-    habitacion = Habitacion.objects.get(id_h=id)
-    comentarios = Comentario.objects.filter(id_h=habitacion)
-    fotos=Galeria.objects.filter(id_h=habitacion)
-    mensaje=""
-    if request.POST:
-        nombre = request.POST.get("nombre")
-        email = request.POST.get("email")
-        id_h = request.POST.get("id_h")
-        comentario = request.POST.get("comentario")
-        fecha_actual = datetime.now()
-        fecha_solo = fecha_actual.date()
-        mensaje=""
-        print("entro")
-        try:
-            come=Comentario()
-            come.comentario=comentario
-            come.correo=email
-            come.fecha_creacion=fecha_solo
-            come.nombre=nombre
-            come.id_h=habitacion
-            come.save()
-            mensaje="Comentario Registrado"
-            print("Grabado")
-        except BaseException as error:
-            mensaje=error
-            print("mensaje")
-    cantidad_comentarios=Comentario.objects.filter(id_h=habitacion).count()
-    contexto={'habitacion':habitacion,'comentarios':comentarios,"cantidad":cantidad_comentarios}
-    contexto["mensaje"]=mensaje
-    contexto["fotos"]=fotos
-    contexto["usuario"]=request.session["email"]
-    return render(request,"habitacion.html",contexto)
-
-@login_required(login_url='/login/')
-def insertar_galeria(request):
-    mensaje=""
-    if request.POST:
-        habitacion = request.POST.get("habitacion")
-        imagen = request.FILES.get("imagen")
-        obj_hab = Habitacion.objects.get(id_h=habitacion)
-
-        gale = Galeria()
-        gale.descripcion=''
-        gale.foto=imagen
-        gale.id_h=obj_hab
-        gale.save()
-        mensaje = "Agrego Imagen para habitacion "
-
-    hab=Habitacion.objects.all()
-    contexto={'lista_h':hab,"mensaje":mensaje}
-    return render(request,"listado_habitaciones.html",contexto)
-
-@login_required(login_url='/login/')
-def reservar(request):
-    contexto={}
-    if request.POST:
-        try:
-            fi=request.POST.get("fi")
-            ft=request.POST.get("ft")
-            # fecha_cad1 = '01-03-2019'
-            # fecha_cad2 = ft[0:10] #'02-03-2019 19:00'
-            # fecha1 = datetime.strptime(fecha_cad1, '%d-%m-%Y')
-            # fecha2 = datetime.strptime(fecha_cad2, '%d-%m-%Y')
-            # res= fecha2 - fecha1
-            # dias = res / timedelta(days=1)
-            fecha1_str =str(fi[6:10])+"-"+str(fi[0:2])+"-"+str(fi[3:5]) # "2023-10-01"
-            fecha2_str =str(ft[6:10])+"-"+str(ft[0:2])+"-"+str(ft[3:5]) # "2024-10-01"
-
-            # Convierte las cadenas a objetos datetime
-            fecha1 = datetime.strptime(fecha1_str, "%Y-%m-%d")
-            fecha2 = datetime.strptime(fecha2_str, "%Y-%m-%d")
-
-            # Calcula la diferencia
-            diferencia = fecha2 - fecha1
-            dias_diferencia =diferencia.days
-            
-            # Muestra la cantidad de días
-            print(f"Días de diferencia: {diferencia.days}")
-            print("inicio:")
-            fecha_inicio=str(fi[6:10])+"-"+str(fi[3:5])+"-"+str(fi[0:2])
-            fecha_termino=str(ft[6:10])+"-"+str(ft[3:5])+"-"+str(ft[0:2])
-            print(str(fi[6:10])+"-"+str(fi[3:5])+"-"+str(fi[0:2]))
-            print("fin:")
-            print(str(ft[6:10])+"-"+str(ft[3:5])+"-"+str(ft[0:2]))
-            contexto["fi"]=fi
-            contexto["ft"]=ft
-            contexto["mensaje"]=diferencia.days
-            datos={
-                'fecha_inicio':fecha_inicio,
-                'fecha_termino':fecha_termino,
-                'dias':dias_diferencia,
-                'valor':request.POST.get("valor")
+                continue
+                clave = x.at[fila, 'Unnamed: 3']
+                valor = x.at[fila, 'Unnamed: 6']
+                    # Verifica que la clave no sea nan
+                if pd.isna(clave):
+                    # print("Clave nula, se omite:", clave)
+                    continue
+                if x.at[fila, 'Unnamed: 3'] in diccionario:
+                    # print("La clave ya existe:", x.at[fila, 'Unnamed: 3'])
+                    diccionario[x.at[fila, 'Unnamed: 3']] = diccionario[x.at[fila, 'Unnamed: 3']] + [x.at[fila, 'Unnamed: 6']]        
+                else:
+                    # print("La clave no existe, se crea:", x.at[fila, 'Unnamed: 3']) 
+                    # print("Valor:", x.at[fila, 'Unnamed: 6']) 
+                    # print("Tipo de valor:", type(x.at[fila, 'Unnamed: 6']))
+                    if str(valor).isnumeric():
+                        diccionario[str(clave)] = [valor]      
+                    # diccionario[str(clave)].append(valor)
                 
-            }
-            res=Reserva()
-            res.dias=dias_diferencia
-            res.cant_personas=request.POST.get("cant_personas")
-            res.obs='--'
-            res.fecha_inicio=datetime.strptime(fi, '%m/%d/%Y %I:%M %p') # datetime.strptime(fi, '%d/%m/%Y %I:%M %p')
-            res.fecha_termino=datetime.strptime(ft, '%m/%d/%Y %I:%M %p') # datetime.strptime(ft, '%d/%m/%Y %I:%M %p')
-            res.valor=request.POST.get("valor")
-            obj_est=EstadoReserva.objects.get(id_estado=2)
-            res.id_estado=obj_est
-            obj_hab=Habitacion.objects.get(id_h=request.POST.get("habitacion"))
-            res.id_h=obj_hab
-            obj_cli=Cliente.objects.get(email=request.POST.get("email"))
-            res.id_reg=obj_cli
-            # Datos a codificar
-            correo_cliente=request.POST.get("email")
-            clave=str(uuid.uuid4())
-            print(f"Clave reserva:{clave}")
-            data = clave
-            
-            # Crear código QR
-            qr = qrcode.QRCode(version=1, box_size=10, border=5)
-            qr.add_data(data)
-            qr.make(fit=True)
+                print(texto)
+                i += 1
+                # for columna in x.columns:
+                #     valor = x.at[fila, columna]
+                #     print("columna", columna)
+                #     print(f"Fila {fila}, Columna {columna}: {valor}")
+        if archivo7:
+                print("procesar Transbank con ERP (archivo7 vcon archivo1)")
+                print("ES VALIDO ARCHIVO 7")
+                TRANS   =pd.read_excel(archivo7,usecols=[1,2,3,4,5,6,7,8,9,10], nrows=1500) #Archivo Transbank
+                diccionario_2 = {}
+                i2=0
+                for fila in TRANS.index:
+                    i2+= 1
+                    fecha = TRANS.at[fila, 'Unnamed: 2']
+                    tipo_tarjeta = TRANS.at[fila, 'Unnamed: 3']
+                    monto_original = TRANS.at[fila, 'Unnamed: 6']
+                    codigo_aut = TRANS.at[fila, 'Unnamed: 7']
+                    texto = f"{i2} - {fecha} - {tipo_tarjeta} - {monto_original} - {codigo_aut}"
+                    print(f"TRANSBANK: -----> {texto}")
+                    ERP=pd.read_excel(archivo1,usecols=[1,2,3,4,5,6,7,8,9,10], nrows=1500) #Archivo ERP
+                    sw=0
+                    for fila_erp in ERP.index:
+                        monto =  ERP.at[fila_erp, 'Unnamed: 8']
+                        codigo_erp = ERP.at[fila_erp, 'Unnamed: 9']
+                        if not pd.isna(tipo_tarjeta):                            
+                            if str(codigo_aut) in str(codigo_erp):
+                                sw=1
+                                print(f"Encontrado ..... (monto original: {monto_original}) - (monto ERP: {monto})")                                
+                                diccionario_2[f"{i2}"]={"tarjeta":tipo_tarjeta,"codigo":str(codigo_aut),"Valor":abs(int(monto)),"Status":"encontrado"}    
+                    if sw==0:
+                        print("No se encontro ------")
+                        diccionario_2[f"{i2}"]={"tarjeta":tipo_tarjeta,"codigo":(codigo_aut),"Valor":monto_original,"Status":"no encontrado"}
+                    # if "US$" in texto:
+                    #     print(texto)
+                    #     codigo_buscar = x.at[fila, 'Unnamed: 3']
+                    #     valor_buscado = abs(int(x.at[fila, 'Unnamed: 8']))
+                    #     #print(f"CODIGO A BUSCAR: {codigo_buscar} - Valor Buscado:{valor_buscado} ")
+                    #     print("-----------------------------------")
+                    #     if "Amex US$" in texto:
+                    #         cantidad=0
+                    #         suma = 0
+                    #         if archivo2:
+                    #             print("Archivo de AMEX US$")
+                    #             amex=pd.read_excel(archivo2,usecols=[1,2,3,4,5,6,7,8,9,10,11,12,13,14], nrows=2500)
+                    #             i_amex=0
+                    #             print("Valores Archivo AMEX US$ -----------------------------------")
+                    #             sw=0
+                    #             for fila_amex in amex.index:
+                    #                 codigo = amex.at[fila_amex, 'Unnamed: 2']
+                    #                 i_amex = i_amex +1
+                    #                 texto_amex = f"{i_amex} - {amex.at[fila_amex, 'Unnamed: 2']} - {amex.at[fila_amex, 'Unnamed: 12']} - {amex.at[fila_amex,'Unnamed: 13']} - {amex.at[fila_amex,'Unnamed: 14']}"
+                    #                 if codigo_buscar==codigo:
+                    #                     cantidad = cantidad +1
+                    #                     print("----> Encontrada la Cuenta:")
+                    #                     if not math.isnan(amex.at[fila_amex, 'Unnamed: 12']): 
+                    #                         if valor_buscado==abs(int(amex.at[fila_amex, 'Unnamed: 12'])):
+                    #                             print(f"Valor Buscado: {valor_buscado} esta presente en OTRA MONEDA {amex.at[fila_amex, 'Unnamed: 12']}")
+                    #                             suma = suma + abs(int(amex.at[fila_amex, 'Unnamed: 12']))
+                    #                     if not math.isnan(amex.at[fila_amex, 'Unnamed: 13']):                                     
+                    #                         if valor_buscado==abs(int(amex.at[fila_amex, 'Unnamed: 13'])):
+                    #                             print(f"Valor Buscado: {valor_buscado} esta presente en SALDO {amex.at[fila_amex, 'Unnamed: 13']}")
+                    #                             suma = suma + abs(int(amex.at[fila_amex, 'Unnamed: 13']))
+                    #                     if not math.isnan(amex.at[fila_amex, 'Unnamed: 14']): 
+                    #                         if valor_buscado==abs(int(amex.at[fila_amex, 'Unnamed: 14'])):
+                    #                             print(f"Valor Buscado: {valor_buscado} esta presente en SALDO CORREGIDO {amex.at[fila_amex, 'Unnamed: 14']}")
+                    #                             suma = suma + abs(int(amex.at[fila_amex, 'Unnamed: 14']))                                    
+                    #                     print(texto_amex)
+                    #                     sw=1
+                    #                     diccionario[f"{i}"]={"tarjeta":"Amex US$","codigo":abs(int(codigo_buscar)),"Valor":valor_buscado,"Status":"encontrado"}
+                    #                     continue
+                    #             if(sw==0):
+                    #                 print(f"NO ENCONTRO EL CODIGO : {codigo_buscar} CUYO VALOR ES DE {valor_buscado}")
+                    #                 diccionario[f"{i}"]={"tarjeta":"Amex US$","codigo":abs(int(codigo_buscar)),"Valor":valor_buscado,"Status":"no encontrado"}                                               
+                
+        diccionario_temp=[
+                {'Amex US$': 'Amex US$', 'Valor US': 0,'Valor TBK':0,'Diferencia':0},
+                {'Dinners US$':'Dinners US$', 'Valor US': 0,'Valor TBK':0,'Diferencia':0},
+                {'Master Card US$': 'Master Card US$', 'Valor US': 0,'Valor TBK':0,'Diferencia':0},
+                {'Visa US$': 'Visa US$', 'Valor US': 0,'Valor TBK':0,'Diferencia':0},
+                {'Total': 'Total', 'Valor US': 0,'Valor TBK':0,'Diferencia':0}
+            ]
+        total_amex=0
+        total_dinners=0
+        total_mc=0
+        total_visa=0
+        for clave, valor in diccionario.items():
+            print(f"Clave: {clave} -> Valor: {valor} -> Dato Valor 1:{list(valor.values())[0]} - Valor: ")
+            valores = list(valor.values()) 
+            if valores[3]=="encontrado":               
+                if "Amex US$" in valores[0]:
+                    total_amex += valores[2] 
+                if "Dinners US$" in valores[0]:
+                    total_dinners += valores[2]
+                if "Master Card US$" in valores[0]:
+                    total_mc += valores[2]
+                if "Visa US$" in valores[0]:
+                    total_visa += valores[2]
+        diccionario_temp[0]["Valor US"]=total_amex
+        diccionario_temp[1]["Valor US"]=total_dinners
+        diccionario_temp[2]["Valor US"]=total_mc
+        diccionario_temp[3]["Valor US"]=total_visa
+        diccionario_temp[4]["Valor US"]=total_visa+total_amex+total_dinners+total_mc
+        print(diccionario_temp)
+        
+        for clave, valor in diccionario_2.items():
+            print(f"Clave: {clave} -> Valor: {valor} -> Dato Valor 1:{list(valor.values())[0]} - Valor: ")
+            valores = list(valor.values())
+            print(f"Clave:{clave} Valores:{valor}") 
+            if valores[3]=="encontrado":               
+                if "AX" in valores[0]:
+                    total_amex += valores[2] 
+                if "DI" in valores[0]:
+                    total_dinners += valores[2]
+                if "MC" in valores[0]:
+                    total_mc += valores[2]
+                if "VI" in valores[0]:
+                    total_visa += valores[2]
+        diccionario_temp[0]["Valor TBK"]=total_amex
+        diccionario_temp[1]["Valor TBK"]=total_dinners
+        diccionario_temp[2]["Valor TBK"]=total_mc
+        diccionario_temp[3]["Valor TBK"]=total_visa
+        diccionario_temp[4]["Valor TBK"]=total_visa+total_amex+total_dinners+total_mc
+        print(diccionario_temp)
+        diccionario_temp[0]["Diferencia"] = diccionario_temp[0]["Valor TBK"] - diccionario_temp[0]["Valor US"]
+        diccionario_temp[1]["Diferencia"] = diccionario_temp[1]["Valor TBK"] - diccionario_temp[1]["Valor US"]
+        diccionario_temp[2]["Diferencia"] = diccionario_temp[2]["Valor TBK"] - diccionario_temp[2]["Valor US"]
+        diccionario_temp[3]["Diferencia"] = diccionario_temp[3]["Valor TBK"] - diccionario_temp[3]["Valor US"]
+        diccionario_temp[4]["Diferencia"] = diccionario_temp[4]["Valor TBK"] - diccionario_temp[4]["Valor US"]
+        
+        contexto["data"]=diccionario_temp        
+    else:
+            print("es invalido")
 
-            img = qr.make_image(fill='black', back_color='white')
+    return render(request,"procesamiento.html",contexto)
 
-            # Convertir a bytes
-            buf = BytesIO()
-            img.save(buf, format='PNG')
-            img_bytes = buf.getvalue()
 
-            # Guardar
-            nombre_archivo= clave+'.png'
-            qr_image = ContentFile(buf.getvalue(), nombre_archivo)
-            
-            res.qr=qr_image
-            res.save()
-                    
-            print(datos)
-            enviar_codigo_qr(redirect,clave=clave,correo=correo_cliente)
-        except BaseException as error:
-            print(f"error grabar reserva {error}")    
-    return render(request,"index.html",contexto)        
-    # return render(request,"login.html",contexto)
+data = {}
+def descargar_excel_ant(request):
+    # Datos de ejemplo
+    data = {
+        'Documento': documento_inf,
+        'Monto': monto_buscar_inf,
+        'Fecha': fecha_inf,
+        'TC':tc_inf
+    }
+    df = pd.DataFrame(data)
 
+
+    # Crear archivo Excel en memoria
+    buffer = BytesIO()
+    df.to_excel(buffer, index=False, engine='openpyxl')
+    buffer.seek(0)
+
+    # Crear respuesta HTTP para descarga
+    response = HttpResponse(
+        buffer,
+        content_type='application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'
+    )
+    response['Content-Disposition'] = 'attachment; filename=mi_archivo.xlsx'
+    return response
+
+def descargar_excel(request):
+    # Datos de ejemplo
+    data = {
+        'Documento': documento_inf,
+        'Monto': monto_buscar_inf,
+        'Fecha': fecha_inf,
+        'TC': tc_inf
+    }
+    df = pd.DataFrame(data)
+
+    # Crear archivo Excel en memoria
+    buffer = BytesIO()
+    df.to_excel(buffer, index=False, engine='openpyxl', startrow=1)  # empezar en fila 2
+    buffer.seek(0)
+
+    # Abrir el workbook con openpyxl para agregar el título
+    wb = load_workbook(buffer)
+    ws = wb.active
+
+    # Agregar título en la primera fila
+    ws['A1'] = "Reporte de Transacciones No Encontradas"  # texto del título
+    ws.merge_cells(start_row=1, start_column=1, end_row=1, end_column=df.shape[1])  # fusionar celdas del título
+
+    # Guardar nuevamente en el buffer
+    buffer = BytesIO()
+    wb.save(buffer)
+    buffer.seek(0)
+
+    # Crear respuesta HTTP para descarga
+    response = HttpResponse(
+        buffer,
+        content_type='application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'
+    )
+    response['Content-Disposition'] = 'attachment; filename=mi_archivo.xlsx'
+    return response
+   
 def generar_qr2(req):
     # Datos a codificar
     data = "https://example.com"
@@ -250,7 +484,6 @@ def login(request):
             contexto = {"mensaje":"usuario y contraseña incorrecto"}
             return render(request,"login.html",contexto)        
     return render(request,"login.html",contexto)
-
 
 def enviar_codigo_qr(request,clave,correo):
     
@@ -294,155 +527,8 @@ def enviar_codigo_qr(request,clave,correo):
     contexto["mensaje"]="OK"
     return 1
 
-
-def reserva(request,id):
-    habitacion = Habitacion.objects.get(id_h=id)
-    comentarios = Comentario.objects.filter(id_h=habitacion)
-    fotos=Galeria.objects.filter(id_h=habitacion)
-    mensaje=""
-    if request.POST:
-        f_inicio = request.POST.get("date3")
-        f_termino= request.POST.get("date4")
-        id_h = request.POST.get("id_h")
-        comentario = request.POST.get("comentario")
-        fecha_actual = datetime.now()
-        fecha_solo = fecha_actual.date()
-        mensaje=""
-        print("entro")
-        try:
-            come=Comentario()
-            come.comentario=comentario
-            come.correo=email
-            come.fecha_creacion=fecha_solo
-            come.nombre=nombre
-            come.id_h=habitacion
-            come.save()
-            mensaje="Comentario Registrado"
-            print("Grabado")
-        except BaseException as error:
-            mensaje=error
-            print("mensaje")
-    cantidad_comentarios=Comentario.objects.filter(id_h=habitacion).count()
-    contexto={'habitacion':habitacion,'comentarios':comentarios,"cantidad":cantidad_comentarios}
-    contexto["mensaje"]=mensaje
-    contexto["fotos"]=fotos
-    return render(request,"habitacion.html",contexto)
-
-
 def cerrar_sesion(request):
     contex = {}
     logout(request)
     return render(request,"index.html",contex)
     
-def registro_turista(request):
-    if request.POST:
-        # Si solo quieres la fecha actual
-        identificacion= request.POST.get("identificacion")
-        nombre = request.POST.get("nombre")
-        ape_paterno = request.POST.get("ap_paterno")
-        ape_materno = request.POST.get("ap_materno")
-        es_nacional=request.POST.get("es_nacional")
-        pais=request.POST.get("pais")
-        habla_espanol=request.POST.get("habla_espanol")
-        idioma_natural=request.POST.get("idioma")
-       
-        fecha_actual = datetime.now()
-        fecha_solo = fecha_actual.date()
-
-        email = request.POST.get("email")
-        pass1 = request.POST.get("pass1")
-        pass2 = request.POST.get("pass2")
-        fecha_creacion = fecha_solo
-        activo=1
-        if pass1!=pass2:
-            contexto= {"mensaje":"contraseñas son diferentes"}
-            return render(request,"registro.html",contexto)
-
-        try:
-            usu = User.objects.get(username=email)
-            contexto = {"mensaje":"nombre de usuario existe"}
-            return render(request,"registro.html",contexto)
-        except:  
-            grupo=Group.objects.get(name='colaboradores')
-            usu = User()
-            usu.first_name=nombre
-            usu.last_name=ape_paterno
-            usu.email=email
-            usu.username=email
-            usu.set_password(pass1)
-            usu.save()
-            usu.groups.add(grupo)
-            print(usu)
-            us = authenticate(request,username=email,password=pass1)
-            login_aut(request,us)
-
-            try:
-                usuarios=Usuarios()
-                usuarios.activo='S'
-                usuarios.correo=email
-                usuarios.fecha_creacion=fecha_solo
-                usuarios.password=pass1
-                usuarios.save()
-                cli=Cliente()
-                cli.identificacion=identificacion
-                cli.nombre=nombre
-                cli.ape_paterno=ape_materno
-                cli.ape_materno=ape_materno
-                cli.es_nacional=es_nacional
-                cli.pais=pais
-                cli.habla_espanol=habla_espanol
-                cli.idioma_natural=idioma_natural
-                cli.id_user=usuarios
-                cli.email=email
-                cli.save()
-            except BaseException as errror:
-                print('errror:',errror)
-            contex = {"nada":''}
-            return render(request, "index.html",contex) 
-    contex={}       
-    return render(request,"registro.html",contex)
-
-def registro_habitacion(request):
-    contex={}
-    if request.POST:
-        # Si solo quieres la fecha actual
-        try:
-            piso= request.POST.get("piso")
-            numero = request.POST.get("numero")
-            cant_personas = request.POST.get("cant_personas")
-            cant_hab = request.POST.get("cant_hab")
-            cant_banos=request.POST.get("cant_banos")
-            metros=request.POST.get("metros")
-            wifi=request.POST.get("wifi")
-            tv=request.POST.get("tv")
-            desayuno=request.POST.get("desayuno")
-            precio=request.POST.get("precio")
-            estrellas=request.POST.get("estrellas")
-            descripcion=request.POST.get("descripcion")
-            tipo_habitacion=request.POST.get("tipo_habitacion")
-            ima  = request.FILES.get("imagen")
-            ha=Habitacion()
-            ha.activa='s'
-            ha.banos=cant_banos
-            ha.cant_personas=cant_personas
-            ha.desayuno=desayuno
-            ha.descripcion=descripcion
-            ha.habitaciones=cant_hab
-            ha.id_th=TipoHabitacion.objects.get(id_th=tipo_habitacion)
-            ha.imagen=ima
-            ha.metros=metros
-            ha.num_star=estrellas
-            ha.numero=numero
-            ha.piso=piso
-            ha.precio_noche=precio
-            ha.tv_cable=tv
-            ha.wifi=wifi
-            ha.save()
-            contex["mensaje"]="Grabo"        
-        except BaseException as error:                                       
-            contex = {"nada":''}
-            return render(request, "index.html",contex) 
-      
-    tipo_h=TipoHabitacion.objects.all()
-    contex["t_hab"]=tipo_h     
-    return render(request,"registro_habitacion.html",contex)
