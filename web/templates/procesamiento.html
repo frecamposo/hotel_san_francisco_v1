@@ -194,18 +194,54 @@
                   <div class="col-12" style="height: 20px"></div>
                   <!-- Botón de carga -->
                   <button type="submit" class="btn btn-primary w-100">
-                    <i class="bi bi-upload"></i> Analizar Archivos
+                    <i class="bi bi-upload"></i> Analizar Archivos por ERP
                   </button>
 
-                  <button type="button" class="btn btn-primary w-100">
+                  <!-- <button type="button" class="btn btn-primary w-100">
                     <i class="bi bi-upload"></i> Abrir Reporte
-                  </button>
+                  </button> -->
 
-                  <a href="{% url 'descargar_excel' %}" class="btn btn-primary">Descargar Excel</a>
+                  <a href="{% url 'descargar_excel' %}" class="btn btn-primary">Descargar Excel Transacciones Ubicadas</a>
+                  <a href="{% url 'descargar_excel_nopresente' %}" class="btn btn-primary">Descargar Excel Transacciones No Ubicadas</a>
                 </div>
               </form>
             </div>
+
+            
+
+
           </div>
+
+          <!-- inicio grafico de reportes Dolar-->
+                       <h4 class="card-title text-center mb-4">Hoteleria San Francisco: Dolar</h4>
+            <!-- Tabla de resumen -->
+            <div class="table-responsive">
+             
+              <table class="table table-bordered table-hover align-middle">
+                <thead class="table-primary text-center">
+                  <tr>
+                    <th>Cuenta</th>
+                    <th>Ventas CM</th>
+                    <th>Ventas TBK</th>
+                    <th>Diferencia</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {% for item in data_dolar %}
+                  <tr>
+                    {% for clave, valor in item.items %}
+                      {% if clave == "Total" %}
+                        <td style="background-color: bisque;">{{valor}}</td>
+                      {% else %}
+                        <td>{{valor}}</td>
+                      {% endif %}                      
+                    {% endfor %}
+                  </tr>
+                   {% endfor %}
+                </tbody>
+              </table>
+             
+            </div>
 
           <!---->
         </div>
@@ -348,6 +384,8 @@
                 </tbody>
               </table>
             </div>
+
+
           </div>
         </div>
       </div>
@@ -383,6 +421,21 @@
       </div>
     </div>
   </div>
+
+                    <div>
+                    
+                    {% if ws == 1 %}
+                      
+                      {% if abonado > 0 %}
+                        <div class="alert alert-success" role="alert">
+                          <strong>Excelente!</strong> Existen {{ abonado }} en transacciones en Dolares que no fueron ubicadas en el ERP. y que se encontraron en el archivo de Transbank.
+                        </div>
+                        {% else %}
+                        <div class="alert alert-warning" role="alert">
+                          <strong>Atencion!</strong> No existen transacciones en Dolares que no hayan sido ubicadas en el ERP.{{msg}}
+                        {% endif %}
+                    {% endif %}
+                  </div>
 <script>
     document.addEventListener("DOMContentLoaded", function() {
       document.getElementById("miBoton").addEventListener("click", function() {
