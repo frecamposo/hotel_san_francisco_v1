@@ -12,7 +12,7 @@ para activar el entorno:
 
 una vez en el entorno, instalar requerimientos:
 
-pip install -r .\requerimientos.txt
+pip install -r .\requerimientos_v2.txt
 
 para iniciar la aplicación:
 
